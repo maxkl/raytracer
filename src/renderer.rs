@@ -56,9 +56,11 @@ impl<L: ImageLoader> Renderer<L> {
             .unwrap_or(self.scene.clear_color)
     }
 
-    fn get_color(&self, ray: &Ray, obj: &Object<L>, hit: &Hit, depth: u32) -> Color {
-        let is_refractive = obj.material.transparency > 0.0;
-        let is_reflective = obj.material.reflectivity > 0.0 || is_refractive;
+    fn get_color(&self, ray: &Ray, obj: &Object, hit: &Hit, depth: u32) -> Color {
+        let material = &self.scene.materials[obj.material_index];
+
+        let is_refractive = material.transparency > 0.0;
+        let is_reflective = material.reflectivity > 0.0 || is_refractive;
 
         let diffuse_color = self.shade_diffuse(obj, hit);
 
@@ -70,9 +72,9 @@ impl<L: ImageLoader> Renderer<L> {
         };
 
         let refractive_color = if is_refractive {
-            let k_r = self.calc_fresnel_reflectivity(&hit.normal, &ray.direction, obj.material.refractive_index);
+            let k_r = self.calc_fresnel_reflectivity(&hit.normal, &ray.direction, material.refractive_index);
 
-            let transmission_ray = Ray::create_transmission(&hit.normal, &ray.direction, &hit.point, obj.material.refractive_index);
+            let transmission_ray = Ray::create_transmission(&hit.normal, &ray.direction, &hit.point, material.refractive_index);
             let refractive_color = transmission_ray
                 .map(|transmission_ray| self.cast_ray(&transmission_ray, depth + 1))
                 .unwrap_or_else(|| Color::black());
@@ -82,11 +84,12 @@ impl<L: ImageLoader> Renderer<L> {
             Color::black()
         };
 
-        (diffuse_color * (1.0 - obj.material.reflectivity - obj.material.transparency) + reflective_color * obj.material.reflectivity + refractive_color * obj.material.transparency).clamp()
+        (diffuse_color * (1.0 - material.reflectivity - material.transparency) + reflective_color * material.reflectivity + refractive_color * material.transparency).clamp()
     }
 
-    fn shade_diffuse(&self, obj: &Object<L>, hit: &Hit) -> Color {
-        let material_color = obj.material.color.color(&hit.tex_coords);
+    fn shade_diffuse(&self, obj: &Object, hit: &Hit) -> Color {
+        let material = &self.scene.materials[obj.material_index];
+        let material_color = material.color.color(&hit.tex_coords);
 
         let mut color = material_color * self.scene.ambient_light_color;
 
@@ -107,7 +110,7 @@ impl<L: ImageLoader> Renderer<L> {
             if in_light {
                 // Calculate color using Lambert's Cosine Law
                 let light_power = hit.normal.dot(to_light).max(0.0) * light.intensity_at(&hit.point);
-                let reflection_factor = obj.material.albedo / f32::consts::PI;
+                let reflection_factor = material.albedo / f32::consts::PI;
                 color += material_color * light.color() * light_power * reflection_factor;
             }
         }
