@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use cgmath::{Point3, Vector3, InnerSpace};
 use dyn_clone::DynClone;
 
-use crate::material::{Material, TexCoords};
+use crate::material::TexCoords;
 
 /// Represents a single ray with origin and direction
 pub struct Ray {
@@ -16,7 +16,7 @@ pub struct Ray {
 
 impl Ray {
     /// Create a ray with the appropriate direction for the specified pixel position and field of view
-    pub fn from_screen_coordinates(x: u32, y: u32, width: u32, height: u32, fov: f32) -> Ray {
+    pub fn from_screen_coordinates(x: usize, y: usize, width: usize, height: usize, fov: f32) -> Ray {
         let fov_factor = (fov.to_radians() / 2.0).tan();
 
         let aspect_ratio = width as f32 / height as f32;
@@ -78,30 +78,29 @@ impl Ray {
     }
 }
 
-pub struct Hit<'a> {
+pub struct Hit {
     pub point: Point3<f32>,
     pub distance: f32,
     pub normal: Vector3<f32>,
-    pub material: &'a Material,
     pub tex_coords: TexCoords<f32>,
 }
 
-impl<'a> PartialEq for Hit<'a> {
+impl PartialEq for Hit {
     /// Hits are equal when their hit distances are equal
     fn eq(&self, other: &Self) -> bool {
         self.distance == other.distance
     }
 }
 
-impl<'a> Eq for Hit<'a> {}
+impl Eq for Hit {}
 
-impl<'a> PartialOrd for Hit<'a> {
+impl PartialOrd for Hit {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for Hit<'a> {
+impl Ord for Hit {
     /// Compare hits by their hit distance
     fn cmp(&self, other: &Self) -> Ordering {
         // Hit distances should never be NaN or Infinity
@@ -109,9 +108,9 @@ impl<'a> Ord for Hit<'a> {
     }
 }
 
-impl<'a> Hit<'a> {
-    pub fn new(point: Point3<f32>, distance: f32, normal: Vector3<f32>, material: &Material, tex_coords: TexCoords<f32>) -> Hit {
-        Hit { point, distance, normal, material, tex_coords }
+impl Hit {
+    pub fn new(point: Point3<f32>, distance: f32, normal: Vector3<f32>, tex_coords: TexCoords<f32>) -> Hit {
+        Hit { point, distance, normal, tex_coords }
     }
 }
 

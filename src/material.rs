@@ -1,11 +1,13 @@
 
-use std::path::PathBuf;
+use std::error::Error;
+use std::path::{PathBuf, Path};
+use std::marker::PhantomData;
 
 use serde::{Serialize, Deserialize, Deserializer, Serializer};
-use image::{DynamicImage, GenericImageView, Pixel, ImageError};
 
-use crate::color::Color;
 use crate::math_util::Modulo;
+use crate::color::Color;
+use crate::image::RgbImage;
 
 /// Generic texture/UV coordinates
 #[derive(Copy, Clone)]
@@ -14,16 +16,21 @@ pub struct TexCoords<T> {
     pub v: T,
 }
 
+pub trait ImageLoader {
+    fn load_image(path: &Path) -> Result<RgbImage, Box<dyn Error>>;
+}
+
 /// Represents a texture.
 ///
 /// Serializes/deserializes to/from a string, which is the path to the image file
 #[derive(Clone)]
-pub struct Texture {
+pub struct Texture<L: ImageLoader> {
     pub path: PathBuf,
-    pub img: DynamicImage,
+    pub img: RgbImage,
+    phantom: PhantomData<L>,
 }
 
-impl Serialize for Texture {
+impl<L: ImageLoader> Serialize for Texture<L> {
     /// Serialize this texture to a string, which is the image file path
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -34,9 +41,9 @@ impl Serialize for Texture {
     }
 }
 
-impl<'de> Deserialize<'de> for Texture {
+impl<'de, L: ImageLoader> Deserialize<'de> for Texture<L> {
     /// Deserialize a texture from a string, which is the image file path
-    fn deserialize<D>(deserializer: D) -> Result<Texture, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Texture<L>, D::Error>
     where
         D: Deserializer<'de>
     {
@@ -49,13 +56,14 @@ impl<'de> Deserialize<'de> for Texture {
     }
 }
 
-impl Texture {
+impl<L: ImageLoader> Texture<L> {
     /// Load a texture from an image file
-    fn load(path: PathBuf) -> Result<Texture, ImageError> {
-        let img = image::open(&path)?;
+    fn load(path: PathBuf) -> Result<Texture<L>, Box<dyn Error>> {
+        let img = L::load_image(&path)?;
         Ok(Texture {
-            path: path,
-            img: img,
+            path,
+            img,
+            phantom: PhantomData,
         })
     }
 
@@ -63,10 +71,10 @@ impl Texture {
         let tex_w = self.img.width() as f32;
         let tex_h = self.img.height() as f32;
 
-        let tex_x = (tex_coords.u * tex_w).round().modulo(tex_w) as u32;
-        let tex_y = (tex_coords.v * tex_h).round().modulo(tex_h) as u32;
+        let tex_x = (tex_coords.u * tex_w).round().modulo(tex_w) as usize;
+        let tex_y = (tex_coords.v * tex_h).round().modulo(tex_h) as usize;
 
-        Color::from_rgb(self.img.get_pixel(tex_x, tex_y).to_rgb())
+        Color::from_u8(&self.img.get_pixel(tex_x, tex_y))
     }
 
     fn sample_bilinear(&self, tex_coords: &TexCoords<f32>) -> Color {
@@ -81,15 +89,15 @@ impl Texture {
         let tex_y_1 = tex_y.floor();
         let tex_y_2 = tex_y.ceil();
 
-        let tex_x_1_wrapped = tex_x_1.modulo(tex_w) as u32;
-        let tex_x_2_wrapped = tex_x_2.modulo(tex_w) as u32;
-        let tex_y_1_wrapped = tex_y_1.modulo(tex_h) as u32;
-        let tex_y_2_wrapped = tex_y_2.modulo(tex_h) as u32;
+        let tex_x_1_wrapped = tex_x_1.modulo(tex_w) as usize;
+        let tex_x_2_wrapped = tex_x_2.modulo(tex_w) as usize;
+        let tex_y_1_wrapped = tex_y_1.modulo(tex_h) as usize;
+        let tex_y_2_wrapped = tex_y_2.modulo(tex_h) as usize;
 
-        let color_1_1 = Color::from_rgb(self.img.get_pixel(tex_x_1_wrapped, tex_y_1_wrapped).to_rgb());
-        let color_2_1 = Color::from_rgb(self.img.get_pixel(tex_x_2_wrapped, tex_y_1_wrapped).to_rgb());
-        let color_1_2 = Color::from_rgb(self.img.get_pixel(tex_x_1_wrapped, tex_y_2_wrapped).to_rgb());
-        let color_2_2 = Color::from_rgb(self.img.get_pixel(tex_x_2_wrapped, tex_y_2_wrapped).to_rgb());
+        let color_1_1 = Color::from_u8(&self.img.get_pixel(tex_x_1_wrapped, tex_y_1_wrapped));
+        let color_2_1 = Color::from_u8(&self.img.get_pixel(tex_x_2_wrapped, tex_y_1_wrapped));
+        let color_1_2 = Color::from_u8(&self.img.get_pixel(tex_x_1_wrapped, tex_y_2_wrapped));
+        let color_2_2 = Color::from_u8(&self.img.get_pixel(tex_x_2_wrapped, tex_y_2_wrapped));
 
         let x_exact = tex_x_1 == tex_x_2;
         let y_exact = tex_y_1 == tex_y_2;
@@ -110,14 +118,14 @@ impl Texture {
 
 /// Represents the various ways a point can be colored
 #[derive(Clone, Serialize, Deserialize)]
-pub enum Coloration {
+pub enum Coloration<L: ImageLoader> {
     /// Uniform color
     Color(Color),
     /// Get color for each point from a texture
-    Texture(Texture),
+    Texture(Texture<L>),
 }
 
-impl Coloration {
+impl<L: ImageLoader> Coloration<L> {
     /// Calculate color at a specific position
     pub fn color(&self, tex_coords: &TexCoords<f32>) -> Color {
         match self {
@@ -129,8 +137,8 @@ impl Coloration {
 
 /// Data struct collecting various material properties
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Material {
-    pub color: Coloration,
+pub struct Material<L: ImageLoader> {
+    pub color: Coloration<L>,
     pub albedo: f32,
     pub reflectivity: f32,
     pub transparency: f32,

@@ -4,7 +4,7 @@ use std::f32;
 use cgmath::{Point3, InnerSpace, Vector3};
 use serde::{Serialize, Deserialize};
 
-use crate::material::{Material, TexCoords};
+use crate::material::TexCoords;
 use crate::ray::{Ray, Hit, Intersectable};
 use crate::math_util::deserialize_normalized;
 
@@ -14,7 +14,6 @@ pub struct Plane {
     pub p0: Point3<f32>,
     #[serde(deserialize_with = "deserialize_normalized")]
     pub normal: Vector3<f32>,
-    pub material: Material,
 }
 
 #[typetag::serde]
@@ -48,7 +47,7 @@ impl Intersectable for Plane {
                     v: hit_vec.dot(y_axis),
                 };
 
-                return Some(Hit::new(hit_point, distance, self.normal, &self.material, tex_coords))
+                return Some(Hit::new(hit_point, distance, self.normal, tex_coords))
             }
         }
 
@@ -61,7 +60,6 @@ impl Intersectable for Plane {
 pub struct Sphere {
     pub center: Point3<f32>,
     pub radius: f32,
-    pub material: Material,
 }
 
 #[typetag::serde]
@@ -127,6 +125,6 @@ impl Intersectable for Sphere {
             v: tex_y,
         };
 
-        Some(Hit::new(hit_point, distance, normal, &self.material, tex_coords))
+        Some(Hit::new(hit_point, distance, normal, tex_coords))
     }
 }

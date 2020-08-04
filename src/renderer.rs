@@ -1,34 +1,35 @@
 
 use std::f32;
 
-use image::{DynamicImage, GenericImage, Pixel};
 use cgmath::{InnerSpace, Vector3};
 
 use crate::color::Color;
+use crate::image::RgbImage;
+use crate::material::ImageLoader;
 use crate::ray::{Ray, Hit};
-use crate::scene::Scene;
+use crate::scene::{Scene, Object};
 
-pub struct Renderer {
-    scene: Scene,
+pub struct Renderer<L: ImageLoader> {
+    scene: Scene<L>,
 }
 
-impl Renderer {
-    pub fn new(scene: Scene) -> Renderer {
+impl<L: ImageLoader> Renderer<L> {
+    pub fn new(scene: Scene<L>) -> Renderer<L> {
         Renderer {
             scene,
         }
     }
 
     /// Render the scene to a new image
-    pub fn render(&self) -> DynamicImage {
+    pub fn render(&self) -> RgbImage {
         let size = self.scene.image_size;
         self.render_rect(0, 0, size.0, size.1)
     }
 
-    pub fn render_rect(&self, x: u32, y: u32, w: u32, h: u32) -> DynamicImage {
+    pub fn render_rect(&self, x: usize, y: usize, w: usize, h: usize) -> RgbImage {
         let full_image_size = self.scene.image_size;
 
-        let mut img = DynamicImage::new_rgb8(w, h);
+        let mut img = RgbImage::new(w, h);
 
         // Iterate over the entire image pixel by pixel
         for y_local in 0..h {
@@ -38,7 +39,7 @@ impl Renderer {
                 // Assign appropriate color
                 let color = self.cast_ray(&ray, 0);
                 // Assign pixel value
-                img.put_pixel(x_local, y_local, color.to_image_color().to_rgba());
+                img.put_pixel(x_local, y_local, &color.to_u8());
             }
         }
 
@@ -51,15 +52,15 @@ impl Renderer {
         }
 
         self.scene.trace(ray)
-            .map(|hit| self.get_color(ray, &hit, depth))
+            .map(|(obj, hit)| self.get_color(ray, obj, &hit, depth))
             .unwrap_or(self.scene.clear_color)
     }
 
-    fn get_color(&self, ray: &Ray, hit: &Hit, depth: u32) -> Color {
-        let is_refractive = hit.material.transparency > 0.0;
-        let is_reflective = hit.material.reflectivity > 0.0 || is_refractive;
+    fn get_color(&self, ray: &Ray, obj: &Object<L>, hit: &Hit, depth: u32) -> Color {
+        let is_refractive = obj.material.transparency > 0.0;
+        let is_reflective = obj.material.reflectivity > 0.0 || is_refractive;
 
-        let diffuse_color = self.shade_diffuse(hit);
+        let diffuse_color = self.shade_diffuse(obj, hit);
 
         let reflective_color = if is_reflective {
             let reflection_ray = Ray::create_reflection(&hit.normal, &ray.direction, &hit.point);
@@ -69,9 +70,9 @@ impl Renderer {
         };
 
         let refractive_color = if is_refractive {
-            let k_r = self.calc_fresnel_reflectivity(&hit.normal, &ray.direction, hit.material.refractive_index);
+            let k_r = self.calc_fresnel_reflectivity(&hit.normal, &ray.direction, obj.material.refractive_index);
 
-            let transmission_ray = Ray::create_transmission(&hit.normal, &ray.direction, &hit.point, hit.material.refractive_index);
+            let transmission_ray = Ray::create_transmission(&hit.normal, &ray.direction, &hit.point, obj.material.refractive_index);
             let refractive_color = transmission_ray
                 .map(|transmission_ray| self.cast_ray(&transmission_ray, depth + 1))
                 .unwrap_or_else(|| Color::black());
@@ -81,11 +82,11 @@ impl Renderer {
             Color::black()
         };
 
-        (diffuse_color * (1.0 - hit.material.reflectivity - hit.material.transparency) + reflective_color * hit.material.reflectivity + refractive_color * hit.material.transparency).clamp()
+        (diffuse_color * (1.0 - obj.material.reflectivity - obj.material.transparency) + reflective_color * obj.material.reflectivity + refractive_color * obj.material.transparency).clamp()
     }
 
-    fn shade_diffuse(&self, hit: &Hit) -> Color {
-        let material_color = hit.material.color.color(&hit.tex_coords);
+    fn shade_diffuse(&self, obj: &Object<L>, hit: &Hit) -> Color {
+        let material_color = obj.material.color.color(&hit.tex_coords);
 
         let mut color = material_color * self.scene.ambient_light_color;
 
@@ -99,14 +100,14 @@ impl Renderer {
             let shadow_hit = self.scene.trace(&shadow_ray);
             // Is there any object in the direction of the light that is closer than the light source?
             let in_light = match shadow_hit {
-                Some(shadow_hit) => shadow_hit.distance > light.distance_at(&hit.point),
+                Some((_, shadow_hit)) => shadow_hit.distance > light.distance_at(&hit.point),
                 None => true,
             };
 
             if in_light {
                 // Calculate color using Lambert's Cosine Law
                 let light_power = hit.normal.dot(to_light).max(0.0) * light.intensity_at(&hit.point);
-                let reflection_factor = hit.material.albedo / f32::consts::PI;
+                let reflection_factor = obj.material.albedo / f32::consts::PI;
                 color += material_color * light.color() * light_power * reflection_factor;
             }
         }

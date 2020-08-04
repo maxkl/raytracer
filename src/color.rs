@@ -1,7 +1,6 @@
 
 use std::ops::{Add, AddAssign, Mul};
 
-use image::{Rgb, Pixel};
 use serde::{Serialize, Deserialize};
 
 /// Represents RGB colors
@@ -70,12 +69,11 @@ impl Color {
         Color { r, g, b }
     }
 
-    pub fn from_rgb(rgb: Rgb<u8>) -> Color {
-        let data = rgb.channels();
+    pub fn from_u8(rgb: &(u8, u8, u8)) -> Color {
         Color {
-            r: data[0] as f32 / 255.0,
-            g: data[1] as f32 / 255.0,
-            b: data[2] as f32 / 255.0,
+            r: rgb.0 as f32 / 255.0,
+            g: rgb.1 as f32 / 255.0,
+            b: rgb.2 as f32 / 255.0,
         }
     }
 
@@ -92,12 +90,12 @@ impl Color {
         }
     }
 
-    /// Convert to 8-bit Rgb struct from `image` crate
-    pub fn to_image_color(&self) -> Rgb<u8> {
-        Rgb([
+    /// Convert to tuple of 8-bit RGB values
+    pub fn to_u8(&self) -> (u8, u8, u8) {
+        (
             (self.r * 255.0) as u8,
             (self.g * 255.0) as u8,
             (self.b * 255.0) as u8,
-        ])
+        )
     }
 }
