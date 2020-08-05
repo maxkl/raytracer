@@ -23,6 +23,7 @@ impl Object {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Scene<L: ImageLoader> {
     pub image_size: (usize, usize),
+    pub aa_samples: usize,
     /// Background color, assigned to pixels that are not covered by any object in the scene
     pub clear_color: Color,
     pub materials: Vec<Material<L>>,

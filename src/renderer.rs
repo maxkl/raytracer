@@ -2,6 +2,8 @@
 use std::f32;
 
 use cgmath::{InnerSpace, Vector3};
+use rand::{thread_rng, Rng};
+use rand_distr::Normal;
 
 use crate::color::Color;
 use crate::image::RgbImage;
@@ -31,13 +33,26 @@ impl<L: ImageLoader> Renderer<L> {
 
         let mut img = RgbImage::new(w, h);
 
+        let aa_samples = self.scene.aa_samples;
+        let mut rng = thread_rng();
+        let distr = Normal::new(0.0f32, 0.4).unwrap();
+
         // Iterate over the entire image pixel by pixel
         for y_local in 0..h {
             for x_local in 0..w {
-                // Construct ray
-                let ray = Ray::from_screen_coordinates(x + x_local, y + y_local, full_image_size.0, full_image_size.1, 45.0);
-                // Assign appropriate color
-                let color = self.cast_ray(&ray, 0);
+                let mut color_sum = Color::black();
+                for _ in 0..aa_samples {
+                    // This is not a true bivariate normal distribution but it's good enough
+                    let sample_x = (x + x_local) as f32 + rng.sample::<f32, _>(distr);
+                    let sample_y = (y + y_local) as f32 + rng.sample::<f32, _>(distr);
+                    // Construct ray
+                    let ray = Ray::from_screen_coordinates(sample_x, sample_y, full_image_size.0, full_image_size.1, 45.0);
+                    // Assign appropriate color
+                    let color = self.cast_ray(&ray, 0);
+
+                    color_sum += color;
+                }
+                let color = color_sum / aa_samples as f32;
                 // Assign pixel value
                 img.put_pixel(x_local, y_local, &color.to_u8());
             }

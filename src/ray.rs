@@ -16,14 +16,14 @@ pub struct Ray {
 
 impl Ray {
     /// Create a ray with the appropriate direction for the specified pixel position and field of view
-    pub fn from_screen_coordinates(x: usize, y: usize, width: usize, height: usize, fov: f32) -> Ray {
+    pub fn from_screen_coordinates(x: f32, y: f32, width: usize, height: usize, fov: f32) -> Ray {
         let fov_factor = (fov.to_radians() / 2.0).tan();
 
         let aspect_ratio = width as f32 / height as f32;
 
         // Calculate screen coordinates between 0 and 1
-        let x_01 = (x as f32 + 0.5) / width as f32;
-        let y_01 = (y as f32 + 0.5) / height as f32;
+        let x_01 = (x + 0.5) / width as f32;
+        let y_01 = (y + 0.5) / height as f32;
 
         // Translate screen coordinates in range [0.0, 1.0] to range [-1.0, 1.0]
         let x_relative = x_01 * 2.0 - 1.0;

@@ -1,5 +1,5 @@
 
-use std::ops::{Add, AddAssign, Mul};
+use std::ops::{Add, AddAssign, Mul, Div};
 
 use serde::{Serialize, Deserialize};
 
@@ -60,6 +60,18 @@ impl Mul<Color> for f32 {
 
     fn mul(self, rhs: Color) -> Color {
         rhs * self
+    }
+}
+
+impl Div<f32> for Color {
+    type Output = Color;
+
+    fn div(self, rhs: f32) -> Color {
+        Color {
+            r: self.r / rhs,
+            g: self.g / rhs,
+            b: self.b / rhs,
+        }
     }
 }
 
