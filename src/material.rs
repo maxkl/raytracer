@@ -1,6 +1,6 @@
 
 use std::error::Error;
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use std::marker::PhantomData;
 
 use serde::{Serialize, Deserialize, Deserializer, Serializer};
@@ -8,6 +8,7 @@ use serde::{Serialize, Deserialize, Deserializer, Serializer};
 use crate::math_util::Modulo;
 use crate::color::Color;
 use crate::image::RgbImage;
+use crate::asset_loader::AssetLoader;
 
 /// Generic texture/UV coordinates
 #[derive(Copy, Clone)]
@@ -16,21 +17,17 @@ pub struct TexCoords<T> {
     pub v: T,
 }
 
-pub trait ImageLoader {
-    fn load_image(path: &Path) -> Result<RgbImage, Box<dyn Error>>;
-}
-
 /// Represents a texture.
 ///
 /// Serializes/deserializes to/from a string, which is the path to the image file
 #[derive(Clone)]
-pub struct Texture<L: ImageLoader> {
+pub struct Texture<L: AssetLoader> {
     pub path: PathBuf,
     pub img: RgbImage,
     phantom: PhantomData<L>,
 }
 
-impl<L: ImageLoader> Serialize for Texture<L> {
+impl<L: AssetLoader> Serialize for Texture<L> {
     /// Serialize this texture to a string, which is the image file path
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -41,7 +38,7 @@ impl<L: ImageLoader> Serialize for Texture<L> {
     }
 }
 
-impl<'de, L: ImageLoader> Deserialize<'de> for Texture<L> {
+impl<'de, L: AssetLoader> Deserialize<'de> for Texture<L> {
     /// Deserialize a texture from a string, which is the image file path
     fn deserialize<D>(deserializer: D) -> Result<Texture<L>, D::Error>
     where
@@ -56,7 +53,7 @@ impl<'de, L: ImageLoader> Deserialize<'de> for Texture<L> {
     }
 }
 
-impl<L: ImageLoader> Texture<L> {
+impl<L: AssetLoader> Texture<L> {
     /// Load a texture from an image file
     fn load(path: PathBuf) -> Result<Texture<L>, Box<dyn Error>> {
         let img = L::load_image(&path)?;
@@ -118,14 +115,14 @@ impl<L: ImageLoader> Texture<L> {
 
 /// Represents the various ways a point can be colored
 #[derive(Clone, Serialize, Deserialize)]
-pub enum Coloration<L: ImageLoader> {
+pub enum Coloration<L: AssetLoader> {
     /// Uniform color
     Color(Color),
     /// Get color for each point from a texture
     Texture(Texture<L>),
 }
 
-impl<L: ImageLoader> Coloration<L> {
+impl<L: AssetLoader> Coloration<L> {
     /// Calculate color at a specific position
     pub fn color(&self, tex_coords: &TexCoords<f32>) -> Color {
         match self {
@@ -137,7 +134,7 @@ impl<L: ImageLoader> Coloration<L> {
 
 /// Data struct collecting various material properties
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Material<L: ImageLoader> {
+pub struct Material<L: AssetLoader> {
     pub color: Coloration<L>,
     pub albedo: f32,
     pub reflectivity: f32,

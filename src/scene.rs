@@ -4,7 +4,8 @@ use serde::{Serialize, Deserialize};
 use crate::color::Color;
 use crate::ray::{Ray, Hit, Intersectable};
 use crate::lights::Light;
-use crate::material::{Material, ImageLoader};
+use crate::material::Material;
+use crate::asset_loader::AssetLoader;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Object {
@@ -21,7 +22,7 @@ impl Object {
 
 /// Holds all information about the scene
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Scene<L: ImageLoader> {
+pub struct Scene<L: AssetLoader> {
     pub image_size: (usize, usize),
     pub aa_samples: usize,
     /// Background color, assigned to pixels that are not covered by any object in the scene
@@ -33,7 +34,7 @@ pub struct Scene<L: ImageLoader> {
     pub max_recursion_depth: u32,
 }
 
-impl<L: ImageLoader> Scene<L> {
+impl<L: AssetLoader> Scene<L> {
     /// Check ray intersections against all objects in the scene and return the closest hit
     pub fn trace(&self, ray: &Ray) -> Option<(&Object, Hit)> {
         self.objects.iter()

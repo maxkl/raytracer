@@ -7,15 +7,15 @@ use rand_distr::Normal;
 
 use crate::color::Color;
 use crate::image::RgbImage;
-use crate::material::ImageLoader;
+use crate::asset_loader::AssetLoader;
 use crate::ray::{Ray, Hit};
 use crate::scene::{Scene, Object};
 
-pub struct Renderer<L: ImageLoader> {
+pub struct Renderer<L: AssetLoader> {
     scene: Scene<L>,
 }
 
-impl<L: ImageLoader> Renderer<L> {
+impl<L: AssetLoader> Renderer<L> {
     pub fn new(scene: Scene<L>) -> Renderer<L> {
         Renderer {
             scene,
