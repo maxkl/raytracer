@@ -6,10 +6,9 @@ mod ray;
 mod primitives;
 mod lights;
 mod scene;
-mod asset_loader;
+pub mod asset_loader;
 mod renderer;
 
 pub use image::RgbImage;
-pub use asset_loader::AssetLoader;
 pub use scene::Scene;
 pub use renderer::Renderer;
