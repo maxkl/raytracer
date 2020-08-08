@@ -1,45 +1,36 @@
 
 use std::f32;
 
-use cgmath::{Point3, InnerSpace, Vector3};
+use cgmath::{InnerSpace, Vector3, EuclideanSpace};
 use serde::{Serialize, Deserialize};
 
 use crate::material::TexCoords;
 use crate::ray::{Ray, Hit, Intersectable};
-use crate::math_util::deserialize_normalized;
 
 /// A plane
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Plane {
-    pub p0: Point3<f32>,
-    #[serde(deserialize_with = "deserialize_normalized")]
-    pub normal: Vector3<f32>,
-}
+pub struct Plane {}
 
 #[typetag::serde]
 impl Intersectable for Plane {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // The normal has to be inverted for this calculation
-        let normal = -self.normal;
+        let normal = -Vector3::unit_y();
 
         // Calculate intersection
         let denominator = normal.dot(ray.direction);
         if denominator > 0.0 {
-            let to_p0 = self.p0 - ray.origin;
+            let to_p0 = -ray.origin.to_vec();
             let distance = to_p0.dot(normal) / denominator;
             if distance > 0.0 {
                 let hit_point = ray.origin + distance * ray.direction;
 
                 // Calculate two perpendicular axes (unit vectors) that lie on the plane
-                let x_axis = if self.normal != Vector3::unit_z() {
-                    self.normal.cross(Vector3::unit_z())
-                } else {
-                    self.normal.cross(Vector3::unit_y())
-                };
-                let y_axis = self.normal.cross(x_axis);
+                let x_axis = Vector3::unit_x();
+                let y_axis = Vector3::unit_z();
 
                 // Vector from plane origin to hit point
-                let hit_vec = hit_point - self.p0;
+                let hit_vec = hit_point.to_vec();
 
                 // Project onto the two plane axes to get the UV coordinates
                 let tex_coords = TexCoords {
@@ -47,7 +38,7 @@ impl Intersectable for Plane {
                     v: hit_vec.dot(y_axis),
                 };
 
-                return Some(Hit::new(hit_point, distance, self.normal, tex_coords))
+                return Some(Hit::new(hit_point, distance, Vector3::unit_y(), tex_coords))
             }
         }
 
@@ -57,16 +48,13 @@ impl Intersectable for Plane {
 
 /// A sphere
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Sphere {
-    pub center: Point3<f32>,
-    pub radius: f32,
-}
+pub struct Sphere {}
 
 #[typetag::serde]
 impl Intersectable for Sphere {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // Calculate vector from ray origin to sphere center (hypotenuse)
-        let to_center = self.center - ray.origin;
+        let to_center = -ray.origin.to_vec();
 
         // Project to_center onto ray direction vector to get length of adjacent side
         let adjacent = to_center.dot(ray.direction);
@@ -83,13 +71,12 @@ impl Intersectable for Sphere {
 
         // The opposite side is the smallest distance between the ray and the sphere center
         // Compare the opposite side and the sphere radius to determine whether the ray goes through the sphere
-        let radius_squared = self.radius.powi(2);
-        if distance_squared > radius_squared {
+        if distance_squared > 1.0 {
             return None;
         }
 
         // Calculate how thick the sphere is at the intersection point
-        let thickness_half = (radius_squared - distance_squared).sqrt();
+        let thickness_half = (1.0 - distance_squared).sqrt();
         // Calculate the distance along the ray of the two intersection points (front and back)
         let t0 = adjacent - thickness_half;
         let t1 = adjacent + thickness_half;
@@ -111,14 +98,15 @@ impl Intersectable for Sphere {
         };
 
         let hit_point = ray.origin + distance * ray.direction;
-        let normal = (hit_point - self.center).normalize();
 
         // Vector from sphere origin to hit point
-        let hit_vec = hit_point - self.center;
+        let hit_vec = hit_point.to_vec();
+
+        let normal = hit_vec.normalize();
 
         // Calculate UV coordinates from spherical coordinates
         let tex_x = (1.0 + hit_vec.z.atan2(hit_vec.x) / f32::consts::PI) * 0.5;
-        let tex_y = (hit_vec.y / self.radius).acos() / f32::consts::PI;
+        let tex_y = hit_vec.y.acos() / f32::consts::PI;
 
         let tex_coords = TexCoords {
             u: tex_x,
