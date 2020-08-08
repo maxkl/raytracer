@@ -165,39 +165,44 @@ impl ObjParser {
                             let parts_parsed = parse_multiple(parts, |part| parse_vertex_ref(part, line_number))?;
                             if parts_parsed.len() < 3 {
                                 return Err(ObjParseError::NotEnoughArguments(line_number, "f".to_string()));
-                            } else if parts_parsed.len() > 3 {
-                                return Err(ObjParseError::TooManyArguments(line_number, "f".to_string()));
                             }
 
-                            let vert0 = parts_parsed[0];
-                            let vert1 = parts_parsed[1];
-                            let vert2 = parts_parsed[2];
+                            let has_tex_coords = parts_parsed[0].1.is_some();
+                            let has_normals = parts_parsed[0].2.is_some();
 
-                            if !(vert0.1.is_some() == vert1.1.is_some() && vert1.1.is_some() == vert2.1.is_some()) {
-                                return Err(ObjParseError::InvalidVertexReference(line_number, "only some vertices have texture coordinates".to_string()));
+                            for part in &parts_parsed {
+                                if part.1.is_some() != has_tex_coords {
+                                    return Err(ObjParseError::InvalidVertexReference(line_number, "only some vertices have texture coordinates".to_string()));
+                                }
+
+                                if part.2.is_some() != has_normals {
+                                    return Err(ObjParseError::InvalidVertexReference(line_number, "only some vertices have normals".to_string()));
+                                }
                             }
 
-                            if !(vert0.2.is_some() == vert1.2.is_some() && vert1.2.is_some() == vert2.2.is_some()) {
-                                return Err(ObjParseError::InvalidVertexReference(line_number, "only some vertices have normals".to_string()));
+                            for i in 2..parts_parsed.len() {
+                                let vert0 = parts_parsed[0];
+                                let vert1 = parts_parsed[i - 1];
+                                let vert2 = parts_parsed[i];
+
+                                let position_indices = (vert0.0, vert1.0, vert2.0);
+                                let tex_coords_indices = if has_tex_coords {
+                                    Some((vert0.1.unwrap(), vert1.1.unwrap(), vert2.1.unwrap()))
+                                } else {
+                                    None
+                                };
+                                let normal_indices = if has_normals {
+                                    Some((vert0.2.unwrap(), vert1.2.unwrap(), vert2.2.unwrap()))
+                                } else {
+                                    None
+                                };
+
+                                triangles.push(IndexedTriangle {
+                                    position_indices,
+                                    normal_indices,
+                                    tex_coords_indices,
+                                });
                             }
-
-                            let position_indices = (vert0.0, vert1.0, vert2.0);
-                            let tex_coords_indices = if vert0.1.is_some() {
-                                Some((vert0.1.unwrap(), vert1.1.unwrap(), vert2.1.unwrap()))
-                            } else {
-                                None
-                            };
-                            let normal_indices = if vert0.2.is_some() {
-                                Some((vert0.2.unwrap(), vert1.2.unwrap(), vert2.2.unwrap()))
-                            } else {
-                                None
-                            };
-
-                            triangles.push(IndexedTriangle {
-                                position_indices,
-                                normal_indices,
-                                tex_coords_indices,
-                            });
                         }
                         keyword => return Err(ObjParseError::InvalidKeyword(line_number, keyword.to_string()))
                     }
