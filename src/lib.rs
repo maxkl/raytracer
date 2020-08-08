@@ -3,6 +3,7 @@ mod color;
 mod image;
 mod material;
 mod ray;
+mod aabb;
 mod primitives;
 mod mesh;
 mod obj_parser;

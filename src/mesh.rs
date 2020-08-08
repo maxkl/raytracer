@@ -3,11 +3,12 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use cgmath::{Vector3, InnerSpace, Zero, EuclideanSpace, Vector2};
+use cgmath::{Vector3, InnerSpace, Zero, EuclideanSpace, Vector2, Point3};
 
 use crate::ray::{Intersectable, Hit, Ray};
 use crate::asset_loader;
 use crate::material::TexCoords;
+use crate::aabb::AABB;
 
 #[derive(Clone)]
 pub struct IndexedTriangle {
@@ -36,12 +37,40 @@ impl MeshData {
     fn get_vertex_tex_coords(&self, index: usize) -> &Vector2<f32> {
         (&self.vertex_tex_coords[index]).into()
     }
+
+    fn bounding_box(&self) -> AABB {
+        let mut min = Point3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY);
+        let mut max = Point3::new(-f32::INFINITY, -f32::INFINITY, -f32::INFINITY);
+
+        for triangle in &self.triangles {
+            let positions = [
+                self.get_vertex_position(triangle.position_indices.0),
+                self.get_vertex_position(triangle.position_indices.1),
+                self.get_vertex_position(triangle.position_indices.2),
+            ];
+
+            for pos in positions.iter() {
+                if pos.x < min.x { min.x = pos.x; }
+                if pos.x > max.x { max.x = pos.x; }
+                if pos.y < min.y { min.y = pos.y; }
+                if pos.y > max.y { max.y = pos.y; }
+                if pos.z < min.z { min.z = pos.z; }
+                if pos.z > max.z { max.z = pos.z; }
+            }
+        }
+
+        AABB::new(
+            &min,
+            &max,
+        )
+    }
 }
 
 #[derive(Clone)]
 pub struct Mesh {
     path: PathBuf,
     data: MeshData,
+    bounding_box: AABB,
 }
 
 impl Serialize for Mesh {
@@ -113,6 +142,10 @@ fn intersect_triangle(ray: &Ray, v0: &Vector3<f32>, v1: &Vector3<f32>, v2: &Vect
 #[typetag::serde]
 impl Intersectable for Mesh {
     fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        if !self.bounding_box.intersects(ray) {
+            return None;
+        }
+
         let mut nearest_hit: Option<(usize, TriangleHit)> = None;
 
         for (i, triangle) in self.data.triangles.iter().enumerate() {
@@ -170,9 +203,11 @@ impl Intersectable for Mesh {
 
 impl Mesh {
     pub fn new(path: PathBuf, data: MeshData) -> Mesh {
+        let bounding_box = data.bounding_box();
         Mesh {
             path,
             data,
+            bounding_box,
         }
     }
 
