@@ -5,9 +5,12 @@ use std::error::Error;
 use once_cell::sync::OnceCell;
 
 use crate::image::RgbImage;
+use crate::mesh::MeshData;
 
 pub trait AssetLoader: Send + Sync {
     fn load_image(&self, path: &Path) -> Result<RgbImage, Box<dyn Error>>;
+
+    fn load_obj(&self, path: &Path) -> Result<MeshData, Box<dyn Error>>;
 }
 
 static INSTANCE: OnceCell<Box<dyn AssetLoader>> = OnceCell::new();
