@@ -2,6 +2,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 use std::time::Instant;
+use std::mem;
 
 use serde::{Serialize, Deserialize, Deserializer};
 use cgmath::{Vector3, InnerSpace, Zero, EuclideanSpace, Vector2};
@@ -103,15 +104,66 @@ impl Default for KDTreeOptions {
 }
 
 #[derive(Clone)]
-pub enum LinearKDTreeNode {
-    Inner { split_axis: Axis, split_position: f32, above_child_index: usize },
-    Leaf { triangle_indices: Vec<usize> },
+pub struct LinearKDTreeNode {
+    /// Leaf node: the two LSBs are 0b11, the 30 MSBs hold the number of triangles in this node
+    /// Inner node: the two LSBs store the split axis (0-2), the 30 MSBs hold the index of the second child node
+    first_field: u32,
+    /// Leaf node: the index of the first triangle in `linear_triangle_indices`
+    /// Inner node: the split position as f32 (using mem::transmute())
+    second_field: u32,
+}
+
+impl LinearKDTreeNode {
+    fn new_leaf(triangle_count: u32, triangles_start_index: u32) -> LinearKDTreeNode {
+        LinearKDTreeNode {
+            first_field: triangle_count.checked_shl(2).unwrap() | 0x3,
+            second_field: triangles_start_index,
+        }
+    }
+
+    fn new_inner(above_child_index: u32, split_axis: Axis, split_position: f32) -> LinearKDTreeNode {
+        LinearKDTreeNode {
+            first_field: above_child_index.checked_shl(2).unwrap() | split_axis as u32,
+            second_field: unsafe { mem::transmute(split_position) },
+        }
+    }
+
+    fn is_inner(&self) -> bool {
+        self.first_field & 0x3 != 0x3
+    }
+
+    fn split_axis(&self) -> Axis {
+        (self.first_field & 0x3).into()
+    }
+
+    fn above_child_index(&self) -> u32 {
+        self.first_field >> 2
+    }
+
+    fn set_above_child_index(&mut self, above_child_index: u32) {
+        self.first_field = above_child_index.checked_shl(2).unwrap() | self.first_field & 0x3;
+    }
+
+    fn triangle_count(&self) -> u32 {
+        self.first_field >> 2
+    }
+
+    fn triangles_start_index(&self) -> u32 {
+        self.second_field
+    }
+
+    fn split_position(&self) -> f32 {
+        unsafe {
+            mem::transmute(self.second_field)
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct LinearKDTree {
     /// All nodes are stored depth-first in this vector to improve traversal speed
     nodes: Vec<LinearKDTreeNode>,
+    linear_triangle_indices: Vec<usize>,
     bounding_box: AABB,
     data: MeshData,
     debug: bool,
@@ -159,9 +211,11 @@ impl LinearKDTree {
         let mut edges = Vec::with_capacity(triangle_count * 2);
 
         let mut nodes = Vec::new();
+        let mut linear_triangle_indices = Vec::new();
 
         LinearKDTree::build_node(
             &mut nodes,
+            &mut linear_triangle_indices,
             &mut indices_below,
             &mut indices_above,
             // The initial set of triangles is passed in `indices_below`
@@ -174,8 +228,12 @@ impl LinearKDTree {
             &mut edges,
         );
 
+        nodes.shrink_to_fit();
+        linear_triangle_indices.shrink_to_fit();
+
         LinearKDTree {
             nodes,
+            linear_triangle_indices,
             bounding_box: root_bounding_box,
             data,
             debug: options.debug,
@@ -187,6 +245,7 @@ impl LinearKDTree {
     /// Arguments:
     ///
     /// * `nodes`: All nodes in depth-first, left-to-right order
+    /// * `linear_triangle_indices`: The indices of all triangles; all indices of one leaf node are grouped together
     /// * `triangle_indices_below`: Heap space for nodes below the previous split
     /// * `triangle_indices_above`: Heap space for nodes above the previous split
     /// * `is_above`: Whether `triangle_indices_below` or `triangle_indices_above` contains the triangle indices for this node
@@ -198,6 +257,7 @@ impl LinearKDTree {
     /// * `edges`: Pre-allocated heap space for bounding box edges
     fn build_node(
         nodes: &mut Vec<LinearKDTreeNode>,
+        linear_triangle_indices: &mut Vec<usize>,
         triangle_indices_below: &mut [usize],
         triangle_indices_above: &mut [usize],
         is_above: bool,
@@ -215,9 +275,9 @@ impl LinearKDTree {
         };
 
         if triangle_count <= options.max_leaf_size || depth_remaining == 0 {
-            nodes.push(LinearKDTreeNode::Leaf {
-                triangle_indices: triangle_indices[0..triangle_count].to_vec(),
-            });
+            let start_index = linear_triangle_indices.len();
+            linear_triangle_indices.extend_from_slice(triangle_indices);
+            nodes.push(LinearKDTreeNode::new_leaf(triangle_count as u32, start_index as u32));
 
             return;
         }
@@ -262,17 +322,14 @@ impl LinearKDTree {
         }
 
         let node_index = nodes.len();
-        nodes.push(LinearKDTreeNode::Inner {
-            split_axis,
-            split_position,
-            // We don't know the index of the second child node yet
-            above_child_index: 0
-        });
+        // We don't know the index of the second child node yet
+        nodes.push(LinearKDTreeNode::new_inner(0, split_axis, split_position));
 
         let mut bounding_box_below = node_bounding_box.clone();
         bounding_box_below.max[split_axis] = split_position;
         LinearKDTree::build_node(
             nodes,
+            linear_triangle_indices,
             triangle_indices_below,
             // The first `n_above` items of `triangle_indices_above` need to be preserved for construction of the second child node
             &mut triangle_indices_above[n_above..],
@@ -287,17 +344,13 @@ impl LinearKDTree {
 
         // Update index of the second child node now that we know it
         let second_child_index = nodes.len();
-        match &mut nodes[node_index] {
-            LinearKDTreeNode::Inner { above_child_index, .. } => {
-                *above_child_index = second_child_index;
-            },
-            _ => unreachable!(),
-        }
+        nodes[node_index].set_above_child_index(second_child_index as u32);
 
         let mut bounding_box_above = node_bounding_box.clone();
         bounding_box_above.min[split_axis] = split_position;
         LinearKDTree::build_node(
             nodes,
+            linear_triangle_indices,
             triangle_indices_below,
             triangle_indices_above,
             true,
@@ -337,72 +390,77 @@ impl LinearKDTree {
                 lookups += 1;
 
                 let node = &self.nodes[node_index];
-                match node {
-                    &LinearKDTreeNode::Inner { split_axis, split_position, above_child_index } => {
-                        let origin_position = ray.origin[split_axis];
+                if node.is_inner() {
+                    let above_child_index = node.above_child_index() as usize;
+                    let split_axis = node.split_axis();
+                    let split_position = node.split_position();
 
-                        // Find distance at which the ray intersects the split plane
-                        let t_split = (split_position - origin_position) * inv_dir[split_axis];
+                    let origin_position = ray.origin[split_axis];
 
-                        // Determine which child the ray crosses first
-                        let first_child_index;
-                        let second_child_index;
-                        if origin_position < split_position || (origin_position == split_position && ray.direction[split_axis] <= 0.0) {
-                            first_child_index = node_index + 1;
-                            second_child_index = above_child_index;
-                        } else {
-                            first_child_index = above_child_index;
-                            second_child_index = node_index + 1;
-                        }
+                    // Find distance at which the ray intersects the split plane
+                    let t_split = (split_position - origin_position) * inv_dir[split_axis];
 
-                        if t_split > t_max || t_split <= 0.0 {
-                            // The ray leaves this node before it intersects the second child (t_split > t_max) or
-                            //  the ray points away from the splitting plane (t_split <= 0)
-                            //  -> only the first child is intersected
-                            todo_stack.push(ToDoItem {
-                                node_index: first_child_index,
-                                t_min,
-                                t_max,
-                            });
-                        } else if t_split < t_min {
-                            // The ray intersects the splitting plane before it enters the node
-                            //  -> only the second child is intersected
-                            todo_stack.push(ToDoItem {
-                                node_index: second_child_index,
-                                t_min,
-                                t_max,
-                            });
-                        } else {
-                            // Stack is LIFO -> node at `first_child_index` will be processed next
-                            todo_stack.push(ToDoItem {
-                                node_index: second_child_index,
-                                t_min: t_split,
-                                t_max,
-                            });
-                            todo_stack.push(ToDoItem {
-                                node_index: first_child_index,
-                                t_min,
-                                t_max: t_split,
-                            });
-                        }
+                    // Determine which child the ray crosses first
+                    let first_child_index;
+                    let second_child_index;
+                    if origin_position < split_position || (origin_position == split_position && ray.direction[split_axis] <= 0.0) {
+                        first_child_index = node_index + 1;
+                        second_child_index = above_child_index;
+                    } else {
+                        first_child_index = above_child_index;
+                        second_child_index = node_index + 1;
                     }
-                    LinearKDTreeNode::Leaf { triangle_indices } => {
-                        // Test ray against all triangles in this node
-                        for &triangle_index in triangle_indices {
-                            let triangle = &self.data.triangles[triangle_index];
-                            let v0 = self.data.get_vertex_position(triangle.position_indices.0);
-                            let v1 = self.data.get_vertex_position(triangle.position_indices.1);
-                            let v2 = self.data.get_vertex_position(triangle.position_indices.2);
 
-                            if let Some(hit) = intersect_triangle(ray, v0, v1, v2) {
-                                // Update `nearest_hit` only if it really is the nearest one
-                                if let Some((_, current_nearest_hit)) = &nearest_hit {
-                                    if hit.distance < current_nearest_hit.distance {
-                                        nearest_hit = Some((triangle_index, hit));
-                                    }
-                                } else {
+                    if t_split > t_max || t_split <= 0.0 {
+                        // The ray leaves this node before it intersects the second child (t_split > t_max) or
+                        //  the ray points away from the splitting plane (t_split <= 0)
+                        //  -> only the first child is intersected
+                        todo_stack.push(ToDoItem {
+                            node_index: first_child_index,
+                            t_min,
+                            t_max,
+                        });
+                    } else if t_split < t_min {
+                        // The ray intersects the splitting plane before it enters the node
+                        //  -> only the second child is intersected
+                        todo_stack.push(ToDoItem {
+                            node_index: second_child_index,
+                            t_min,
+                            t_max,
+                        });
+                    } else {
+                        // Stack is LIFO -> node at `first_child_index` will be processed next
+                        todo_stack.push(ToDoItem {
+                            node_index: second_child_index,
+                            t_min: t_split,
+                            t_max,
+                        });
+                        todo_stack.push(ToDoItem {
+                            node_index: first_child_index,
+                            t_min,
+                            t_max: t_split,
+                        });
+                    }
+                } else {
+                    let start_index = node.triangles_start_index() as usize;
+                    let triangle_count = node.triangle_count() as usize;
+                    let triangle_indices = &self.linear_triangle_indices[start_index..(start_index + triangle_count)];
+
+                    // Test ray against all triangles in this node
+                    for &triangle_index in triangle_indices {
+                        let triangle = &self.data.triangles[triangle_index];
+                        let v0 = self.data.get_vertex_position(triangle.position_indices.0);
+                        let v1 = self.data.get_vertex_position(triangle.position_indices.1);
+                        let v2 = self.data.get_vertex_position(triangle.position_indices.2);
+
+                        if let Some(hit) = intersect_triangle(ray, v0, v1, v2) {
+                            // Update `nearest_hit` only if it really is the nearest one
+                            if let Some((_, current_nearest_hit)) = &nearest_hit {
+                                if hit.distance < current_nearest_hit.distance {
                                     nearest_hit = Some((triangle_index, hit));
                                 }
+                            } else {
+                                nearest_hit = Some((triangle_index, hit));
                             }
                         }
                     }

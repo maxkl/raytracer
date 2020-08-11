@@ -44,6 +44,17 @@ pub enum Axis {
     Z = 2
 }
 
+impl From<u32> for Axis {
+    fn from(axis_int: u32) -> Axis {
+        match axis_int {
+            0 => Axis::X,
+            1 => Axis::Y,
+            2 => Axis::Z,
+            _ => panic!("Invalid integer value for axis")
+        }
+    }
+}
+
 impl<S> Index<Axis> for Vector3<S> {
     type Output = S;
 
