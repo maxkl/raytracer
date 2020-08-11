@@ -1,6 +1,6 @@
 
 use serde::{Serialize, Deserialize};
-use cgmath::{Matrix4, SquareMatrix, Vector3, Euler, Deg, Transform, MetricSpace, InnerSpace};
+use cgmath::{Matrix4, SquareMatrix, Vector3, Euler, Deg};
 
 use crate::color::Color;
 use crate::ray::{Ray, Hit, Intersectable};
@@ -75,23 +75,11 @@ pub struct Object {
 impl Object {
     pub fn intersect(&self, ray: &Ray) -> Option<(&Object, Hit)> {
         // Transform ray origin and direction into object space
-        let object_ray = Ray {
-            origin: self.inv_transformation_matrix.transform_point(ray.origin),
-            direction: self.inv_transformation_matrix.transform_vector(ray.direction).normalize(),
-        };
+        let object_ray = ray.transform(&self.inv_transformation_matrix);
         let object_hit = self.shape.intersect(&object_ray);
         // Transform the hit point back to world space
         let world_hit = object_hit.map(|hit| {
-            let world_point = self.transformation_matrix.transform_point(hit.point);
-            let world_distance = ray.origin.distance(world_point);
-            let world_normal = self.transformation_matrix.transform_vector(hit.normal).normalize();
-
-            Hit {
-                point: world_point,
-                distance: world_distance,
-                normal: world_normal,
-                tex_coords: hit.tex_coords,
-            }
+            hit.transform(&self.transformation_matrix, &ray.origin)
         });
 
         world_hit.map(|hit| (self, hit))

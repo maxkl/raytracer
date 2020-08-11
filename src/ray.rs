@@ -1,10 +1,16 @@
 
 use std::cmp::Ordering;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-use cgmath::{Point3, Vector3, InnerSpace};
+use cgmath::{Point3, Vector3, InnerSpace, Matrix4, Transform, MetricSpace};
 use dyn_clone::DynClone;
 
 use crate::material::TexCoords;
+
+pub struct RayDebugData {
+    pub kd_tree_lookups: usize,
+}
 
 /// Represents a single ray with origin and direction
 pub struct Ray {
@@ -12,9 +18,29 @@ pub struct Ray {
     pub origin: Point3<f32>,
     /// Unit vector representing the rays direction
     pub direction: Vector3<f32>,
+
+    pub debug_data: Rc<RefCell<RayDebugData>>,
 }
 
 impl Ray {
+    pub fn new(origin: Point3<f32>, direction: Vector3<f32>) -> Ray {
+        Ray {
+            origin,
+            direction,
+            debug_data: Rc::new(RefCell::new(RayDebugData {
+                kd_tree_lookups: 0,
+            })),
+        }
+    }
+
+    pub fn transform(&self, transformation: &Matrix4<f32>) -> Ray {
+        Ray {
+            origin: transformation.transform_point(self.origin),
+            direction: transformation.transform_vector(self.direction).normalize(),
+            debug_data: self.debug_data.clone(),
+        }
+    }
+
     /// Create a ray with the appropriate direction for the specified pixel position and field of view
     pub fn from_screen_coordinates(x: f32, y: f32, width: usize, height: usize, fov: f32) -> Ray {
         let fov_factor = (fov.to_radians() / 2.0).tan();
@@ -35,17 +61,17 @@ impl Ray {
 
         let direction_normalized = Vector3::new(ray_x, ray_y, -1.0).normalize();
 
-        Ray {
-            origin: Point3::new(0.0, 0.0, 0.0),
-            direction: direction_normalized,
-        }
+        Ray::new(
+            Point3::new(0.0, 0.0, 0.0),
+            direction_normalized,
+        )
     }
 
     pub fn create_reflection(normal: &Vector3<f32>, incident: &Vector3<f32>, hit_point: &Point3<f32>) -> Ray {
-        Ray {
-            origin: (hit_point + 1e-5 * normal),
-            direction: incident - (2.0 * incident.dot(*normal) * normal),
-        }
+        Ray::new(
+            hit_point + 1e-5 * normal,
+            incident - (2.0 * incident.dot(*normal) * normal),
+        )
     }
 
     pub fn create_transmission(normal: &Vector3<f32>, incident: &Vector3<f32>, hit_point: &Point3<f32>, refractive_index: f32) -> Option<Ray> {
@@ -70,10 +96,10 @@ impl Ray {
         if k < 0.0 {
             None
         } else {
-            Some(Ray {
-                origin: (hit_point - 1e-5 * ref_n),
-                direction: incident * eta + (i_dot_n * eta - k.sqrt()) * ref_n,
-            })
+            Some(Ray::new(
+                hit_point - 1e-5 * ref_n,
+                incident * eta + (i_dot_n * eta - k.sqrt()) * ref_n,
+            ))
         }
     }
 }
@@ -111,6 +137,18 @@ impl Ord for Hit {
 impl Hit {
     pub fn new(point: Point3<f32>, distance: f32, normal: Vector3<f32>, tex_coords: TexCoords<f32>) -> Hit {
         Hit { point, distance, normal, tex_coords }
+    }
+
+    pub fn transform(&self, transformation: &Matrix4<f32>, ray_origin: &Point3<f32>) -> Hit {
+        let transformed_point = transformation.transform_point(self.point);
+        let transformed_distance = ray_origin.distance(transformed_point);
+
+        Hit {
+            point: transformed_point,
+            distance: transformed_distance,
+            normal: transformation.transform_vector(self.normal).normalize(),
+            tex_coords: self.tex_coords,
+        }
     }
 }
 

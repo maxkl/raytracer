@@ -65,9 +65,15 @@ impl Renderer {
             return Color::black();
         }
 
-        self.scene.trace(ray)
+        let base_color = self.scene.trace(ray)
             .map(|(obj, hit)| self.get_color(ray, obj, &hit, depth))
-            .unwrap_or(self.scene.clear_color)
+            .unwrap_or(self.scene.clear_color);
+
+        let debug_data = ray.debug_data.borrow();
+        let kd_tree_lookups_value = debug_data.kd_tree_lookups.min(100) as f32 * (1.0 / 100.0);
+        let debug_color = Color::new(kd_tree_lookups_value, 0.0, 0.0);
+
+        base_color + debug_color
     }
 
     fn get_color(&self, ray: &Ray, obj: &Object, hit: &Hit, depth: u32) -> Color {
@@ -113,7 +119,7 @@ impl Renderer {
             let to_light = light.direction_from(&hit.point);
 
             // Cast ray towards the light to check whether the point lies in the shadow
-            let shadow_ray = Ray { origin: hit.point + hit.normal * 1e-5, direction: to_light };
+            let shadow_ray = Ray::new(hit.point + hit.normal * 1e-5, to_light);
             let shadow_hit = self.scene.trace(&shadow_ray);
             // Is there any object in the direction of the light that is closer than the light source?
             let in_light = match shadow_hit {

@@ -1,5 +1,7 @@
 
-use cgmath::{VectorSpace, InnerSpace, BaseFloat};
+use std::ops::{Index, IndexMut};
+
+use cgmath::{VectorSpace, InnerSpace, BaseFloat, Vector3, Point3};
 use serde::{Deserialize, Deserializer};
 
 /// Deserialize a vector and normalize it
@@ -32,5 +34,40 @@ pub trait Modulo<RHS=Self> {
 impl Modulo for f32 {
     fn modulo(&self, rhs: f32) -> f32 {
         ((self % rhs) + rhs) % rhs
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum Axis {
+    X = 0,
+    Y = 1,
+    Z = 2
+}
+
+impl<S> Index<Axis> for Vector3<S> {
+    type Output = S;
+
+    fn index(&self, axis: Axis) -> &S {
+        AsRef::<[S; 3]>::as_ref(self).index(axis as usize)
+    }
+}
+
+impl<S> IndexMut<Axis> for Vector3<S> {
+    fn index_mut(&mut self, axis: Axis) -> &mut S {
+        AsMut::<[S; 3]>::as_mut(self).index_mut(axis as usize)
+    }
+}
+
+impl<S> Index<Axis> for Point3<S> {
+    type Output = S;
+
+    fn index(&self, axis: Axis) -> &S {
+        AsRef::<[S; 3]>::as_ref(self).index(axis as usize)
+    }
+}
+
+impl<S> IndexMut<Axis> for Point3<S> {
+    fn index_mut(&mut self, axis: Axis) -> &mut S {
+        AsMut::<[S; 3]>::as_mut(self).index_mut(axis as usize)
     }
 }
