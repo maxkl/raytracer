@@ -167,6 +167,7 @@ pub struct LinearKDTree {
     bounding_box: AABB,
     data: MeshData,
     debug: bool,
+    intersect_stack_capacity: usize,
 }
 
 /// Edge of a bounding box projected onto an axis
@@ -231,12 +232,16 @@ impl LinearKDTree {
         nodes.shrink_to_fit();
         linear_triangle_indices.shrink_to_fit();
 
+        let max_depth = Self::max_depth_recursive(&nodes, 0);
+        let intersect_stack_capacity = (max_depth as f32 * 0.65).round() as usize;
+
         LinearKDTree {
             nodes,
             linear_triangle_indices,
             bounding_box: root_bounding_box,
             data,
             debug: options.debug,
+            intersect_stack_capacity,
         }
     }
 
@@ -363,14 +368,37 @@ impl LinearKDTree {
         );
     }
 
+    fn max_depth_recursive(nodes: &[LinearKDTreeNode], node_index: usize) -> usize {
+        let node = &nodes[node_index];
+        if node.is_inner() {
+            let first_child_index = node_index + 1;
+            let second_child_index = node.above_child_index() as usize;
+
+            let max_child_depth = usize::max(
+                Self::max_depth_recursive(nodes, first_child_index),
+                Self::max_depth_recursive(nodes, second_child_index)
+            );
+
+            max_child_depth + 1
+        } else {
+            1
+        }
+    }
+
+    pub fn max_depth(&self) -> usize {
+        Self::max_depth_recursive(&self.nodes, 0)
+    }
+
     pub fn intersect(&self, ray: &Ray) -> Option<Hit> {
         if let Some((bb_t_min, bb_t_max)) = self.bounding_box.intersects_p(ray) {
+            let mut todo_stack = Vec::with_capacity(self.intersect_stack_capacity);
+
             // Push root node onto stack
-            let mut todo_stack = vec![ToDoItem {
+            todo_stack.push(ToDoItem {
                 node_index: 0,
                 t_min: bb_t_min,
                 t_max: bb_t_max,
-            }];
+            });
 
             let mut nearest_hit: Option<(usize, TriangleHit)> = None;
 
@@ -572,7 +600,8 @@ impl Mesh {
         });
         let duration = start.elapsed().as_secs_f64();
         if debug {
-            println!("K-D tree for {} built in {} s", path.display(), duration);
+            let max_depth = kdtree.max_depth();
+            println!("K-D tree for {} built in {} s with a maximum depth of {} nodes", path.display(), duration, max_depth);
         }
 
         Mesh {
