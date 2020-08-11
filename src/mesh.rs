@@ -96,7 +96,7 @@ impl Default for KDTreeOptions {
     fn default() -> Self {
         KDTreeOptions {
             max_depth: None,
-            max_leaf_size: 5,
+            max_leaf_size: 16,
             debug: false,
         }
     }
