@@ -9,7 +9,6 @@ use cgmath::{Vector3, InnerSpace, Zero, EuclideanSpace, Vector2};
 
 use crate::ray::{Intersectable, Hit, Ray};
 use crate::asset_loader;
-use crate::material::TexCoords;
 use crate::aabb::AABB;
 use crate::math_util::Axis;
 
@@ -535,7 +534,7 @@ impl LinearKDTree {
                     point: ray.origin + ray.direction * triangle_hit.distance,
                     distance: triangle_hit.distance,
                     normal,
-                    tex_coords: TexCoords { u: tex_coords.x, v: tex_coords.y },
+                    tex_coords,
                 }
             })
         } else {

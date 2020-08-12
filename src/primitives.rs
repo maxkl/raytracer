@@ -1,10 +1,9 @@
 
 use std::f32;
 
-use cgmath::{InnerSpace, Vector3, EuclideanSpace};
+use cgmath::{InnerSpace, Vector3, EuclideanSpace, Vector2};
 use serde::{Serialize, Deserialize};
 
-use crate::material::TexCoords;
 use crate::ray::{Ray, Hit, Intersectable};
 
 /// A plane
@@ -33,10 +32,7 @@ impl Intersectable for Plane {
                 let hit_vec = hit_point.to_vec();
 
                 // Project onto the two plane axes to get the UV coordinates
-                let tex_coords = TexCoords {
-                    u: hit_vec.dot(x_axis),
-                    v: hit_vec.dot(y_axis),
-                };
+                let tex_coords = Vector2::new(hit_vec.dot(x_axis), hit_vec.dot(y_axis));
 
                 return Some(Hit::new(hit_point, distance, Vector3::unit_y(), tex_coords))
             }
@@ -108,10 +104,7 @@ impl Intersectable for Sphere {
         let tex_x = (1.0 + hit_vec.z.atan2(hit_vec.x) / f32::consts::PI) * 0.5;
         let tex_y = hit_vec.y.acos() / f32::consts::PI;
 
-        let tex_coords = TexCoords {
-            u: tex_x,
-            v: tex_y,
-        };
+        let tex_coords = Vector2::new(tex_x, tex_y);
 
         Some(Hit::new(hit_point, distance, normal, tex_coords))
     }

@@ -3,10 +3,8 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use cgmath::{Point3, Vector3, InnerSpace, Matrix4, Transform, MetricSpace};
+use cgmath::{Point3, Vector3, InnerSpace, Matrix4, Transform, MetricSpace, Vector2};
 use dyn_clone::DynClone;
-
-use crate::material::TexCoords;
 
 pub struct RayDebugData {
     pub kd_tree_lookups: usize,
@@ -108,7 +106,7 @@ pub struct Hit {
     pub point: Point3<f32>,
     pub distance: f32,
     pub normal: Vector3<f32>,
-    pub tex_coords: TexCoords<f32>,
+    pub tex_coords: Vector2<f32>,
 }
 
 impl PartialEq for Hit {
@@ -135,7 +133,7 @@ impl Ord for Hit {
 }
 
 impl Hit {
-    pub fn new(point: Point3<f32>, distance: f32, normal: Vector3<f32>, tex_coords: TexCoords<f32>) -> Hit {
+    pub fn new(point: Point3<f32>, distance: f32, normal: Vector3<f32>, tex_coords: Vector2<f32>) -> Hit {
         Hit { point, distance, normal, tex_coords }
     }
 

@@ -3,18 +3,12 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize, Deserializer, Serializer};
+use cgmath::Vector2;
 
 use crate::math_util::Modulo;
 use crate::color::Color;
 use crate::image::RgbImage;
 use crate::asset_loader;
-
-/// Generic texture/UV coordinates
-#[derive(Copy, Clone)]
-pub struct TexCoords<T> {
-    pub u: T,
-    pub v: T,
-}
 
 /// Represents a texture.
 ///
@@ -62,22 +56,22 @@ impl Texture {
         })
     }
 
-    fn sample_nearest(&self, tex_coords: &TexCoords<f32>) -> Color {
+    fn sample_nearest(&self, tex_coords: &Vector2<f32>) -> Color {
         let tex_w = self.img.width() as f32;
         let tex_h = self.img.height() as f32;
 
-        let tex_x = (tex_coords.u * tex_w).round().modulo(tex_w) as usize;
-        let tex_y = (tex_coords.v * tex_h).round().modulo(tex_h) as usize;
+        let tex_x = (tex_coords.x * tex_w).round().modulo(tex_w) as usize;
+        let tex_y = (tex_coords.y * tex_h).round().modulo(tex_h) as usize;
 
         Color::from_u8(&self.img.get_pixel(tex_x, tex_y))
     }
 
-    fn sample_bilinear(&self, tex_coords: &TexCoords<f32>) -> Color {
+    fn sample_bilinear(&self, tex_coords: &Vector2<f32>) -> Color {
         let tex_w = self.img.width() as f32;
         let tex_h = self.img.height() as f32;
 
-        let tex_x = tex_coords.u * tex_w;
-        let tex_y = tex_coords.v * tex_h;
+        let tex_x = tex_coords.x * tex_w;
+        let tex_y = tex_coords.y * tex_h;
 
         let tex_x_1 = tex_x.floor();
         let tex_x_2 = tex_x.ceil();
@@ -122,7 +116,7 @@ pub enum Coloration {
 
 impl Coloration {
     /// Calculate color at a specific position
-    pub fn color(&self, tex_coords: &TexCoords<f32>) -> Color {
+    pub fn color(&self, tex_coords: &Vector2<f32>) -> Color {
         match self {
             Coloration::Color(color) => *color,
             Coloration::Texture(tex) => tex.sample_bilinear(tex_coords),
