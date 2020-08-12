@@ -23,12 +23,13 @@ impl Renderer {
 
     /// Render the scene to a new image
     pub fn render(&self) -> RgbImage {
-        let size = self.scene.image_size;
+        let size = self.scene.camera.resolution;
         self.render_rect(0, 0, size.0, size.1)
     }
 
     pub fn render_rect(&self, x: usize, y: usize, w: usize, h: usize) -> RgbImage {
-        let full_image_size = self.scene.image_size;
+        let camera = &self.scene.camera;
+        let full_image_size = camera.resolution;
 
         let mut img = RgbImage::new(w, h);
 
@@ -45,9 +46,10 @@ impl Renderer {
                     let sample_x = (x + x_local) as f32 + rng.sample::<f32, _>(distr);
                     let sample_y = (y + y_local) as f32 + rng.sample::<f32, _>(distr);
                     // Construct ray
-                    let ray = Ray::from_screen_coordinates(sample_x, sample_y, full_image_size.0, full_image_size.1, 45.0);
+                    let camera_ray = Ray::from_screen_coordinates(sample_x, sample_y, full_image_size.0, full_image_size.1, camera.fov);
+                    let world_ray = camera_ray.transform(&camera.transformation_matrix);
                     // Assign appropriate color
-                    let color = self.cast_ray(&ray, 0);
+                    let color = self.cast_ray(&world_ray, 0);
 
                     color_sum += color;
                 }

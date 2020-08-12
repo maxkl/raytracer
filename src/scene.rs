@@ -1,6 +1,6 @@
 
 use serde::{Serialize, Deserialize};
-use cgmath::{Matrix4, SquareMatrix, Vector3, Euler, Deg};
+use cgmath::{Matrix4, SquareMatrix, Vector3, Euler, Deg, Point3};
 
 use crate::color::Color;
 use crate::ray::{Ray, Hit, Intersectable};
@@ -86,10 +86,57 @@ impl Object {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct DeserializableCamera {
+    pub resolution: (usize, usize),
+    pub fov: f32,
+    pub position: Point3<f32>,
+    pub direction: Vector3<f32>,
+    pub up: Vector3<f32>,
+}
+
+impl From<Camera> for DeserializableCamera {
+    fn from(o: Camera) -> DeserializableCamera {
+        DeserializableCamera {
+            resolution: o.resolution,
+            fov: o.fov,
+            position: o.position,
+            direction: o.direction,
+            up: o.up,
+        }
+    }
+}
+
+impl From<DeserializableCamera> for Camera {
+    fn from(d: DeserializableCamera) -> Camera {
+        let transformation_matrix = Matrix4::look_at_dir(d.position, d.direction, d.up).invert().unwrap();
+        Camera {
+            resolution: d.resolution,
+            fov: d.fov,
+            position: d.position,
+            direction: d.direction,
+            up: d.up,
+            transformation_matrix,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(from = "DeserializableCamera")]
+#[serde(into = "DeserializableCamera")]
+pub struct Camera {
+    pub resolution: (usize, usize),
+    pub fov: f32,
+    pub position: Point3<f32>,
+    pub direction: Vector3<f32>,
+    pub up: Vector3<f32>,
+    pub transformation_matrix: Matrix4<f32>,
+}
+
 /// Holds all information about the scene
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Scene {
-    pub image_size: (usize, usize),
+    pub camera: Camera,
     pub aa_samples: usize,
     /// Background color, assigned to pixels that are not covered by any object in the scene
     pub clear_color: Color,
