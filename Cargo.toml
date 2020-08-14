@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["maxkl <max@maxkl.de>"]
 edition = "2018"
 
+[features]
+wasm-bindgen = ["rand/wasm-bindgen"]
+
 [dependencies]
 cgmath = { version = "0.17.0", features = ["serde"] }
 serde = { version = "1.0.114", features = ["derive"] }
