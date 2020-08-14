@@ -7,7 +7,7 @@ use std::mem;
 use serde::{Serialize, Deserialize, Deserializer};
 use cgmath::{Vector3, InnerSpace, Zero, EuclideanSpace, Vector2};
 
-use crate::ray::{Intersectable, Hit, Ray};
+use crate::ray::{Hit, Ray};
 use crate::asset_loader;
 use crate::aabb::AABB;
 use crate::math_util::Axis;
@@ -583,13 +583,6 @@ impl<'de> Deserialize<'de> for Mesh {
     }
 }
 
-#[typetag::serde]
-impl Intersectable for Mesh {
-    fn intersect(&self, ray: &Ray) -> Option<Hit> {
-        self.kdtree.intersect(ray)
-    }
-}
-
 impl Mesh {
     pub fn new(path: PathBuf, data: MeshData, debug: bool) -> Mesh {
         let start = Instant::now();
@@ -614,5 +607,9 @@ impl Mesh {
         let a = asset_loader::get_instance();
         let data = a.load_obj(&path)?;
         Ok(Mesh::new(path, data, debug))
+    }
+
+    pub fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        self.kdtree.intersect(ray)
     }
 }

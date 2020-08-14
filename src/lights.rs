@@ -3,20 +3,45 @@ use std::f32;
 
 use cgmath::{Vector3, Point3, InnerSpace};
 use serde::{Serialize, Deserialize};
-use dyn_clone::DynClone;
 
 use crate::color::Color;
 use crate::math_util::deserialize_normalized;
 
-#[typetag::serde(tag = "type")]
-pub trait Light: DynClone + Send {
-    fn direction_from(&self, point: &Point3<f32>) -> Vector3<f32>;
-    fn color(&self, ) -> Color;
-    fn intensity_at(&self, point: &Point3<f32>) -> f32;
-    fn distance_at(&self, point: &Point3<f32>) -> f32;
+#[derive(Clone, Serialize, Deserialize)]
+pub enum Light {
+    Directional(DirectionalLight),
+    Point(PointLight),
 }
 
-dyn_clone::clone_trait_object!(Light);
+impl Light {
+    pub fn direction_from(&self, point: &Point3<f32>) -> Vector3<f32> {
+        match self {
+            Light::Directional(directional_light) => directional_light.direction_from(point),
+            Light::Point(point_light) => point_light.direction_from(point),
+        }
+    }
+
+    pub fn color(&self) -> Color {
+        match self {
+            Light::Directional(directional_light) => directional_light.color(),
+            Light::Point(point_light) => point_light.color(),
+        }
+    }
+
+    pub fn intensity_at(&self, point: &Point3<f32>) -> f32 {
+        match self {
+            Light::Directional(directional_light) => directional_light.intensity_at(point),
+            Light::Point(point_light) => point_light.intensity_at(point),
+        }
+    }
+
+    pub fn distance_at(&self, point: &Point3<f32>) -> f32 {
+        match self {
+            Light::Directional(directional_light) => directional_light.distance_at(point),
+            Light::Point(point_light) => point_light.distance_at(point),
+        }
+    }
+}
 
 /// A light that only has a direction, e.g. from the sun
 #[derive(Clone, Serialize, Deserialize)]
@@ -27,8 +52,7 @@ pub struct DirectionalLight {
     pub intensity: f32,
 }
 
-#[typetag::serde]
-impl Light for DirectionalLight {
+impl DirectionalLight {
     #[allow(unused_variables)]
     fn direction_from(&self, point: &Point3<f32>) -> Vector3<f32> {
         -self.direction
@@ -57,8 +81,7 @@ pub struct PointLight {
     pub intensity: f32,
 }
 
-#[typetag::serde]
-impl Light for PointLight {
+impl PointLight {
     fn direction_from(&self, point: &Point3<f32>) -> Vector3<f32> {
         (self.point - point).normalize()
     }

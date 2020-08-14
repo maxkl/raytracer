@@ -4,15 +4,14 @@ use std::f32;
 use cgmath::{InnerSpace, Vector3, EuclideanSpace, Vector2};
 use serde::{Serialize, Deserialize};
 
-use crate::ray::{Ray, Hit, Intersectable};
+use crate::ray::{Ray, Hit};
 
 /// A plane
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Plane {}
 
-#[typetag::serde]
-impl Intersectable for Plane {
-    fn intersect(&self, ray: &Ray) -> Option<Hit> {
+impl Plane {
+    pub fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // The normal has to be inverted for this calculation
         let normal = -Vector3::unit_y();
 
@@ -46,9 +45,8 @@ impl Intersectable for Plane {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Sphere {}
 
-#[typetag::serde]
-impl Intersectable for Sphere {
-    fn intersect(&self, ray: &Ray) -> Option<Hit> {
+impl Sphere {
+    pub fn intersect(&self, ray: &Ray) -> Option<Hit> {
         // Calculate vector from ray origin to sphere center (hypotenuse)
         let to_center = -ray.origin.to_vec();
 

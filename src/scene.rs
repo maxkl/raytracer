@@ -3,9 +3,11 @@ use serde::{Serialize, Deserialize};
 use cgmath::{Matrix4, SquareMatrix, Vector3, Euler, Deg, Point3};
 
 use crate::color::Color;
-use crate::ray::{Ray, Hit, Intersectable};
+use crate::ray::{Ray, Hit};
 use crate::lights::Light;
 use crate::material::Material;
+use crate::primitives::{Plane, Sphere};
+use crate::mesh::Mesh;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Transformation {
@@ -32,7 +34,7 @@ impl Transformation {
 
 #[derive(Serialize, Deserialize)]
 struct DeserializableObject {
-    pub shape: Box<dyn Intersectable>,
+    pub shape: Shape,
     pub material_index: usize,
     pub transform: Transformation,
 }
@@ -62,10 +64,27 @@ impl From<DeserializableObject> for Object {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub enum Shape {
+    Plane(Plane),
+    Sphere(Sphere),
+    Mesh(Mesh),
+}
+
+impl Shape {
+    pub fn intersect(&self, ray: &Ray) -> Option<Hit> {
+        match self {
+            Shape::Plane(plane) => plane.intersect(ray),
+            Shape::Sphere(sphere) => sphere.intersect(ray),
+            Shape::Mesh(mesh) => mesh.intersect(ray),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(from = "DeserializableObject")]
 #[serde(into = "DeserializableObject")]
 pub struct Object {
-    pub shape: Box<dyn Intersectable>,
+    pub shape: Shape,
     pub material_index: usize,
     pub transformation: Transformation,
     pub transformation_matrix: Matrix4<f32>,
@@ -143,7 +162,7 @@ pub struct Scene {
     pub materials: Vec<Material>,
     pub objects: Vec<Object>,
     pub ambient_light_color: Color,
-    pub lights: Vec<Box<dyn Light>>,
+    pub lights: Vec<Light>,
     pub max_recursion_depth: u32,
 }
 
